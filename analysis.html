@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6维分析详情 - AI智球</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  color-scheme:dark;
+  --bg:#0f141a;--bar:#121820;--surface:#171e26;--surface-2:#1d2630;--card:#202933;
+  --line:#283440;--line-soft:#23303b;--text:#edf3f8;--text-strong:#fff;--muted:#8fa2b5;
+  --blue:#2d8cff;--blue-soft:#0d3c62;--green:#2bc276;--amber:#f4c95d;--red:#ef4e55;--shadow:0 14px 32px rgba(0,0,0,.22)
+}
+body.light{
+  color-scheme:light;
+  --bg:#eef3f8;--bar:#ffffff;--surface:#ffffff;--surface-2:#f4f7fb;--card:#ffffff;
+  --line:#cfd9e5;--line-soft:#e1e8f0;--text:#172331;--text-strong:#0b1622;--muted:#52677a;
+  --blue:#1769e0;--blue-soft:#e6f0ff;--green:#0f7a45;--amber:#9a6a00;--red:#c9363d;--shadow:0 10px 28px rgba(22,35,49,.10)
+}
+html,body{min-height:100%;font-family:'Noto Sans SC',system-ui,sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;padding-top:72px}
+button{cursor:pointer;font:inherit}
+
+.topbar{position:fixed;top:0;left:0;right:0;z-index:50;height:72px;background:var(--bar);border-bottom:1px solid var(--line-soft);display:flex;align-items:center;justify-content:space-between;padding:0 28px}
+.logo{display:flex;align-items:center;gap:10px;font-size:22px;font-weight:800;text-decoration:none;color:var(--text-strong)}
+.back-btn{height:35px;padding:0 16px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);color:var(--text);font-weight:700;font-size:14px;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+
+.wrap{max-width:1400px;margin:0 auto;padding:24px 28px 56px}
+.match-header{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:24px;margin-bottom:24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px}
+.match-title{font-size:28px;font-weight:800;color:var(--text-strong)}
+.match-meta{color:var(--muted);font-size:14px;font-weight:700}
+.match-result{font-size:32px;font-weight:800;color:var(--green)}
+
+.analysis-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:20px;margin-bottom:24px}
+.analysis-card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px}
+.analysis-card h3{font-size:18px;font-weight:800;color:var(--text-strong);margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--line-soft)}
+.analysis-content{font-size:14px;line-height:1.7;color:var(--text)}
+.analysis-content .label{color:var(--muted);font-weight:700;display:inline-block;min-width:80px}
+.analysis-content .value{color:var(--text-strong);font-weight:700}
+.analysis-content .recommendation{margin-top:12px;padding:10px;background:rgba(43,194,118,.12);border:1px solid rgba(43,194,118,.3);border-radius:8px;color:var(--green);font-weight:700;font-size:15px}
+
+.chart-container{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px;margin-bottom:20px;min-height:350px}
+.chart-container h3{font-size:16px;font-weight:800;color:var(--text-strong);margin-bottom:12px}
+
+@media(max-width:1180px){.analysis-grid{grid-template-columns:1fr}}
+@media(max-width:680px){.match-header{flex-direction:column;align-items:flex-start}.match-title{font-size:22px}}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <a href="index.html" class="logo">
+    <svg viewBox="0 0 64 64" width="31" height="31"><path d="M32 5 55 18v28L32 59 9 46V18L32 5Z" fill="#132337" stroke="#55a7ff" stroke-width="4"/><path d="M32 15v34M18 23l28 18M46 23 18 41" stroke="#8fd3ff" stroke-width="4" stroke-linecap="round"/></svg>
+    <span>AI智球</span>
+  </a>
+  <a href="index.html" class="back-btn">← 返回看板</a>
+</header>
+
+<main class="wrap">
+  <div class="match-header" id="matchHeader">
+    <div>
+      <div class="match-title" id="matchTitle">加载中...</div>
+      <div class="match-meta" id="matchMeta"></div>
+    </div>
+    <div class="match-result" id="matchResult"></div>
+  </div>
+  
+  <div class="analysis-grid" id="analysisGrid">
+    <!-- 6维分析卡片将通过JS动态生成 -->
+  </div>
+  
+  <div id="chartsContainer">
+    <!-- Chart.js图表将通过JS动态生成 -->
+  </div>
+</main>
+
+<script>
+// 主题切换
+const savedTheme = localStorage.getItem('theme') || 'dark';
+if (savedTheme === 'light') {
+  document.body.className = 'light';
+}
+
+// 获取URL参数
+function getUrlParam(param) {
+  const urlParams = new URLSearchParams(window.location.search);
+  return urlParams.get(param);
+}
+
+// 加载比赛数据
+async function loadMatchData() {
+  const matchId = getUrlParam('id');
+  if (!matchId) {
+    document.getElementById('matchTitle').textContent = '错误：缺少比赛ID';
+    return;
+  }
+  
+  try {
+    const response = await fetch('analysis_results_all_matches_optimized.json');
+    const data = await response.json();
+    const match = data.find(m => m.match_id == matchId);
+    
+    if (!match) {
+      document.getElementById('matchTitle').textContent = '错误：未找到比赛';
+      return;
+    }
+    
+    renderMatchDetail(match);
+    renderAnalysisCards(match);
+    renderCharts(match);
+    
+  } catch (error) {
+    console.error('加载数据失败:', error);
+    document.getElementById('matchTitle').textContent = '加载数据失败';
+  }
+}
+
+// 渲染比赛详情
+function renderMatchDetail(match) {
+  document.getElementById('matchTitle').textContent = `${match.home_team} vs ${match.away_team}`;
+  document.getElementById('matchMeta').textContent = `${match.competition || '未知赛事'} · ${match.match_date || '未知日期'}`;
+  
+  // 如果有实际比分，显示结果
+  // 注意：当前数据集可能没有实际比分，需要根据实际情况调整
+  document.getElementById('matchResult').textContent = '待预测';
+}
+
+// 渲染6维分析卡片
+function renderAnalysisCards(match) {
+  const grid = document.getElementById('analysisGrid');
+  
+  const cards = [
+    createEuropeanOddsCard(match),
+    createOverUnderCard(match),
+    createAsianHandicapCard(match),
+    createKellyIndexCard(match),
+    createHotColdIndexCard(match),
+    createBetfairIndexCard(match)
+  ];
+  
+  grid.innerHTML = cards.join('');
+}
+
+// 创建欧赔分析卡片
+function createEuropeanOddsCard(match) {
+  const euro = match.european_odds || {};
+  const homeOdds = euro.home_win_odds ? euro.home_win_odds.toFixed(2) : '-';
+  const drawOdds = euro.draw_odds ? euro.draw_odds.toFixed(2) : '-';
+  const awayOdds = euro.away_win_odds ? euro.away_win_odds.toFixed(2) : '-';
+  
+  const homeProb = euro.home_win_odds ? (1 / euro.home_win_odds * 100).toFixed(1) : '-';
+  const drawProb = euro.draw_odds ? (1 / euro.draw_odds * 100).toFixed(1) : '-';
+  const awayProb = euro.away_win_odds ? (1 / euro.away_win_odds * 100).toFixed(1) : '-';
+  
+  const calc = match.calculation_details || {};
+  const recommendation = calc.home_win_prob > calc.away_win_prob ? '主胜' : '客胜';
+  
+  return `
+    <div class="analysis-card">
+      <h3>⚽ 欧赔分析</h3>
+      <div class="analysis-content">
+        <div><span class="label">主胜赔率:</span> <span class="value">${homeOdds}</span> (${homeProb}%)</div>
+        <div><span class="label">平局赔率:</span> <span class="value">${drawOdds}</span> (${drawProb}%)</div>
+        <div><span class="label">客胜赔率:</span> <span class="value">${awayOdds}</span> (${awayProb}%)</div>
+        <div class="recommendation">✅ 推荐: ${recommendation}</div>
+      </div>
+      <div class="chart-container" style="margin-top:16px;padding:12px;min-height:250px">
+        <canvas id="euroChart"></canvas>
+      </div>
+    </div>
+  `;
+}
+
+// 创建大小球分析卡片
+function createOverUnderCard(match) {
+  const ou = match.over_under || {};
+  const line = ou.over_under_line || '-';
+  const overOdds = ou.over_odds ? ou.over_odds.toFixed(2) : '-';
+  const underOdds = ou.under_odds ? ou.under_odds.toFixed(2) : '-';
+  const expectedGoals = ou.expected_goals ? ou.expected_goals.toFixed(2) : '-';
+  
+  const recommendation = expectedGoals > line ? '大于' : '小于';
+  
+  return `
+    <div class="analysis-card">
+      <h3>📊 大小球分析</h3>
+      <div class="analysis-content">
+        <div><span class="label">盘口:</span> <span class="value">${line} 球</span></div>
+        <div><span class="label">大球赔率:</span> <span class="value">${overOdds}</span></div>
+        <div><span class="label">小球赔率:</span> <span class="value">${underOdds}</span></div>
+        <div><span class="label">预期进球:</span> <span class="value">${expectedGoals}</span></div>
+        <div class="recommendation">✅ 推荐: ${recommendation} ${line}球</div>
+      </div>
+      <div class="chart-container" style="margin-top:16px;padding:12px;min-height:250px">
+        <canvas id="ouChart"></canvas>
+      </div>
+    </div>
+  `;
+}
+
+// 创建亚盘分析卡片
+function createAsianHandicapCard(match) {
+  const ah = match.asian_handicap || {};
+  const handicap = ah.handicap !== undefined ? ah.handicap : '-';
+  const homeOdds = ah.home_odds ? ah.home_odds.toFixed(2) : '-';
+  const awayOdds = ah.away_odds ? ah.away_odds.toFixed(2) : '-';
+  
+  return `
+    <div class="analysis-card">
+      <h3>🎯 亚盘分析</h3>
+      <div class="analysis-content">
+        <div><span class="label">让球盘口:</span> <span class="value">${handicap > 0 ? '+' : ''}${handicap}</span></div>
+        <div><span class="label">主队赔率:</span> <span class="value">${homeOdds}</span></div>
+        <div><span class="label">客队赔率:</span> <span class="value">${awayOdds}</span></div>
+        <div class="recommendation">ℹ️ 亚盘分析基于让球盘口</div>
+      </div>
+    </div>
+  `;
+}
+
+// 创建凯利指数分析卡片
+function createKellyIndexCard(match) {
+  const kelly = match.kelly_index || {};
+  const kellyData = kelly.kelly_index || {};
+  const homeKelly = kellyData.home !== undefined ? kellyData.home.toFixed(3) : '-';
+  const drawKelly = kellyData.draw !== undefined ? kellyData.draw.toFixed(3) : '-';
+  const awayKelly = kellyData.away !== undefined ? kellyData.away.toFixed(3) : '-';
+  
+  const hasValue = kelly.has_value ? '✅ 有' : '❌ 无';
+  const recommendation = kelly.recommendation || '-';
+  
+  return `
+    <div class="analysis-card">
+      <h3>📈 凯利指数分析</h3>
+      <div class="analysis-content">
+        <div><span class="label">主胜凯利:</span> <span class="value">${homeKelly}</span></div>
+        <div><span class="label">平局凯利:</span> <span class="value">${drawKelly}</span></div>
+        <div><span class="label">客胜凯利:</span> <span class="value">${awayKelly}</span></div>
+        <div><span class="label">是否有价值:</span> <span class="value">${hasValue}</span></div>
+        <div class="recommendation">💡 推荐: ${recommendation}</div>
+      </div>
+      <div class="chart-container" style="margin-top:16px;padding:12px;min-height:250px">
+        <canvas id="kellyChart"></canvas>
+      </div>
+    </div>
+  `;
+}
+
+// 创建冷热指数分析卡片
+function createHotColdIndexCard(match) {
+  const hc = match.hot_cold_index || {};
+  const hcData = hc.hot_cold_index || {};
+  const homeHC = hcData.home !== undefined ? hcData.home : '-';
+  const drawHC = hcData.draw !== undefined ? hcData.draw : '-';
+  const awayHC = hcData.away !== undefined ? hcData.away : '-';
+  
+  return `
+    <div class="analysis-card">
+      <h3>🌡️ 冷热指数分析</h3>
+      <div class="analysis-content">
+        <div><span class="label">主队热度:</span> <span class="value">${homeHC}</span></div>
+        <div><span class="label">平局热度:</span> <span class="value">${drawHC}</span></div>
+        <div><span class="label">客队热度:</span> <span class="value">${awayHC}</span></div>
+        <div class="recommendation">ℹ️ 冷热指数反映市场情绪</div>
+      </div>
+    </div>
+  `;
+}
+
+// 创建必发指数分析卡片
+function createBetfairIndexCard(match) {
+  const bf = match.betfair_index || {};
+  const bfData = bf.betfair_index || {};
+  const homeBF = bfData.home !== undefined ? bfData.home : '-';
+  const drawBF = bfData.draw !== undefined ? bfData.draw : '-';
+  const awayBF = bfData.away !== undefined ? bfData.away : '-';
+  
+  return `
+    <div class="analysis-card">
+      <h3>💰 必发指数分析</h3>
+      <div class="analysis-content">
+        <div><span class="label">主队资金:</span> <span class="value">${homeBF}</span></div>
+        <div><span class="label">平局资金:</span> <span class="value">${drawBF}</span></div>
+        <div><span class="label">客队资金:</span> <span class="value">${awayBF}</span></div>
+        <div class="recommendation">💡 必发指数反映聪明钱流向</div>
+      </div>
+      <div class="chart-container" style="margin-top:16px;padding:12px;min-height:250px">
+        <canvas id="betfairChart"></canvas>
+      </div>
+    </div>
+  `;
+}
+
+// 渲染Chart.js图表
+function renderCharts(match) {
+  // 延迟执行，确保DOM已渲染
+  setTimeout(() => {
+    renderEuroChart(match);
+    renderOUChart(match);
+    renderKellyChart(match);
+    renderBetfairChart(match);
+  }, 100);
+}
+
+// 渲染欧赔图表
+function renderEuroChart(match) {
+  const canvas = document.getElementById('euroChart');
+  if (!canvas) return;
+  
+  const euro = match.european_odds || {};
+  const homeProb = euro.home_win_odds ? (1 / euro.home_win_odds * 100) : 0;
+  const drawProb = euro.draw_odds ? (1 / euro.draw_odds * 100) : 0;
+  const awayProb = euro.away_win_odds ? (1 / euro.away_win_odds * 100) : 0;
+  
+  new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: ['主胜', '平局', '客胜'],
+      datasets: [{
+        label: '隐含概率 (%)',
+        data: [homeProb, drawProb, awayProb],
+        backgroundColor: ['#2bc276', '#f4c95d', '#ef4e55']
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false }
+      }
+    }
+  });
+}
+
+// 渲染大小球图表
+function renderOUChart(match) {
+  const canvas = document.getElementById('ouChart');
+  if (!canvas) return;
+  
+  const ou = match.over_under || {};
+  const expectedGoals = ou.expected_goals || 0;
+  const line = ou.over_under_line || 2.5;
+  
+  new Chart(canvas, {
+    type: 'doughnut',
+    data: {
+      labels: ['大于' + line, '小于' + line],
+      datasets: [{
+        data: [expectedGoals > line ? 65 : 35, expectedGoals > line ? 35 : 65],
+        backgroundColor: ['#2bc276', '#ef4e55']
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        title: {
+          display: true,
+          text: '大小球预测 (预期: ' + expectedGoals.toFixed(2) + '球)'
+        }
+      }
+    }
+  });
+}
+
+// 渲染凯利指数图表
+function renderKellyChart(match) {
+  const canvas = document.getElementById('kellyChart');
+  if (!canvas) return;
+  
+  const kelly = match.kelly_index || {};
+  const kellyData = kelly.kelly_index || {};
+  
+  new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: ['主胜', '平局', '客胜'],
+      datasets: [{
+        label: '凯利指数',
+        data: [kellyData.home || 0, kellyData.draw || 0, kellyData.away || 0],
+        backgroundColor: function(context) {
+          const value = context.parsed.y;
+          return value > 0 ? '#2bc276' : '#ef4e55';
+        }
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        title: {
+          display: true,
+          text: '凯利指数 (有价值 > 0)'
+        }
+      }
+    }
+  });
+}
+
+// 渲染必发指数图表
+function renderBetfairChart(match) {
+  const canvas = document.getElementById('betfairChart');
+  if (!canvas) return;
+  
+  const bf = match.betfair_index || {};
+  const bfData = bf.betfair_index || {};
+  
+  new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: ['主队', '平局', '客队'],
+      datasets: [{
+        label: '资金流向 (%)',
+        data: [bfData.home || 0, bfData.draw || 0, bfData.away || 0],
+        backgroundColor: ['#2bc276', '#f4c95d', '#ef4e55']
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        title: {
+          display: true,
+          text: '必发资金流向'
+        }
+      }
+    }
+  });
+}
+
+// 页面加载时执行
+document.addEventListener('DOMContentLoaded', () => {
+  loadMatchData();
+});
+</script>
+</body>
+</html>
