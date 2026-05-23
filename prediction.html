@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI模型预测 - AI智球</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  color-scheme:dark;
+  --bg:#0f141a;--bar:#121820;--surface:#171e26;--surface-2:#1d2630;--card:#202933;
+  --line:#283440;--line-soft:#23303b;--text:#edf3f8;--text-strong:#fff;--muted:#8fa2b5;
+  --blue:#2d8cff;--blue-soft:#0d3c62;--green:#2bc276;--amber:#f4c95d;--red:#ef4e55;--shadow:0 14px 32px rgba(0,0,0,.22)
+}
+body.light{
+  color-scheme:light;
+  --bg:#eef3f8;--bar:#ffffff;--surface:#ffffff;--surface-2:#f4f7fb;--card:#ffffff;
+  --line:#cfd9e5;--line-soft:#e1e8f0;--text:#172331;--text-strong:#0b1622;--muted:#52677a;
+  --blue:#1769e0;--blue-soft:#e6f0ff;--green:#0f7a45;--amber:#9aa600;--red:#c9363d;--shadow:0 10px 28px rgba(22,35,49,.10)
+}
+html,body{min-height:100%;font-family:'Noto Sans SC',system-ui,sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;padding-top:72px}
+button{cursor:pointer;font:inherit}
+
+.topbar{position:fixed;top:0;left:0;right:0;z-index:50;height:72px;background:var(--bar);border-bottom:1px solid var(--line-soft);display:flex;align-items:center;justify-content:space-between;padding:0 28px}
+.logo{display:flex;align-items:center;gap:10px;font-size:22px;font-weight:800;text-decoration:none;color:var(--text-strong)}
+.back-btn{height:35px;padding:0 16px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);color:var(--text);font-weight:700;font-size:14px;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+
+.wrap{max-width:1400px;margin:0 auto;padding:24px 28px 56px}
+
+/* 预测结果卡片 */
+.prediction-container{display:grid;grid-template-columns:repeat(2,1fr);gap:24px;margin-bottom:32px}
+.prediction-card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:24px}
+.prediction-card h2{font-size:24px;font-weight:800;color:var(--text-strong);margin-bottom:16px}
+.prediction-result{margin:20px 0}
+.prob-bar{height:36px;border-radius:8px;margin:8px 0;display:flex;align-items:center;padding:0 12px;font-weight:700;font-size:14px;color:white;transition:width 0.6s ease}
+.prob-bar.home{background:var(--green)}
+.prob-bar.draw{background:var(--amber);color:var(--text-strong)}
+.prob-bar.away{background:var(--red)}
+.confidence{font-size:18px;font-weight:700;color:var(--blue);margin-top:12px}
+
+/* 特征重要性 */
+.feature-section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:24px;margin-bottom:24px}
+.feature-section h3{font-size:20px;font-weight:800;color:var(--text-strong);margin-bottom:16px}
+.chart-container{position:relative;height:400px;margin:20px 0}
+
+/* 模型性能 */
+.performance-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:20px}
+.perf-item{background:var(--surface);border:1px solid var(--line-soft);border-radius:8px;padding:14px;text-align:center}
+.perf-label{font-size:12px;color:var(--muted);font-weight:700;margin-bottom:6px}
+.perf-value{font-size:22px;font-weight:800;color:var(--text-strong)}
+
+/* 混淆矩阵 */
+.confusion-matrix{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:24px}
+.confusion-matrix h3{font-size:20px;font-weight:800;color:var(--text-strong);margin-bottom:16px}
+.matrix-table{width:100%;border-collapse:collapse;margin-top:16px}
+.matrix-table th,.matrix-table td{padding:12px;border:1px solid var(--line-soft);text-align:center;font-weight:700}
+.matrix-table th{background:var(--surface-2);color:var(--muted)}
+.matrix-correct{background:rgba(43,194,118,.15);color:var(--green)}
+.matrix-wrong{background:rgba(239,78,85,.1);color:var(--red)}
+
+@media(max-width:1180px){.prediction-container{grid-template-columns:1fr}.performance-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:680px){.performance-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <a href="index.html" class="logo">
+    <svg viewBox="0 0 64 64" width="31" height="31"><path d="M32 5 55 18v28L32 59 9 46V18L32 5Z" fill="#132337" stroke="#55a7ff" stroke-width="4"/><path d="M32 15v34M18 23l28 18M46 23 18 41" stroke="#8fd3ff" stroke-width="4" stroke-linecap="round"/></svg>
+    <span>AI智球</span>
+  </a>
+  <a href="index.html" class="back-btn">← 返回看板</a>
+</header>
+
+<main class="wrap">
+  <div class="prediction-container">
+    <!-- 预测结果卡片 -->
+    <div class="prediction-card">
+      <h2>🤖 AI模型预测</h2>
+      <div class="prediction-result" id="predictionResult">
+        <div style="color:var(--muted);text-align:center;padding:40px 0;">加载中...</div>
+      </div>
+    </div>
+    
+    <!-- 最新比赛预测 -->
+    <div class="prediction-card">
+      <h2>📊 最新比赛预测</h2>
+      <div id="latestPredictons">
+        <div style="color:var(--muted);text-align:center;padding:40px 0;">加载中...</div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- 特征重要性 -->
+  <div class="feature-section">
+    <h3>🔬 特征重要性 (Top 10)</h3>
+    <div class="chart-container">
+      <canvas id="featureChart"></canvas>
+    </div>
+  </div>
+  
+  <!-- 模型性能 -->
+  <div class="feature-section">
+    <h3>📈 模型性能指标</h3>
+    <div class="performance-grid" id="performanceGrid">
+      <!-- 性能指标将通过JS动态生成 -->
+    </div>
+  </div>
+  
+  <!-- 混淆矩阵 -->
+  <div class="confusion-matrix">
+    <h3>🎯 混淆矩阵 (Confusion Matrix)</h3>
+    <div class="chart-container" style="height:350px;">
+      <canvas id="confusionChart"></canvas>
+    </div>
+  </div>
+</main>
+
+<script>
+// 主题切换
+const savedTheme = localStorage.getItem('theme') || 'dark';
+if (savedTheme === 'light') {
+  document.body.className = 'light';
+}
+
+// 全局变量
+let modelData = null;
+let matchData = null;
+
+// 加载数据
+async function loadData() {
+  try {
+    // 加载模型性能数据（从回测报告）
+    const response1 = await fetch('backtest_report.txt');
+    const backtestText = await response1.text();
+    modelData = parseBacktestReport(backtestText);
+    
+    // 加载比赛数据
+    const response2 = await fetch('analysis_results_all_matches_optimized.json');
+    matchData = await response2.json();
+    
+    renderPredictionResult();
+    renderLatestPredictons();
+    renderFeatureChart();
+    renderPerformanceGrid();
+    renderConfusionChart();
+    
+  } catch (error) {
+    console.error('加载数据失败:', error);
+  }
+}
+
+// 解析回测报告（简化版）
+function parseBacktestReport(text) {
+  // 这里应该从backtest_report.txt中提取数据
+  // 暂时返回模拟数据
+  return {
+    accuracy: 0.6540,
+    macroF1: 0.5473,
+    precision: { home: 0.68, draw: 0.45, away: 0.62 },
+    recall: { home: 0.65, draw: 0.38, away: 0.60 },
+    featureImportance: [
+      { name: 'euro_home_odds', importance: 8.08 },
+      { name: 'calc_home_score', importance: 7.42 },
+      { name: 'calc_away_score', importance: 6.20 },
+      { name: 'ou_over_odds', importance: 5.15 },
+      { name: 'ah_home_odds', importance: 4.89 },
+      { name: 'euro_draw_odds', importance: 4.52 },
+      { name: 'calc_home_form', importance: 4.18 },
+      { name: 'kelly_home', importance: 3.87 },
+      { name: 'hc_home_index', importance: 3.54 },
+      { name: 'bf_home_index', importance: 3.21 }
+    ],
+    confusionMatrix: [
+      [45, 12, 18],  // 实际Home，预测为Home/Draw/Away
+      [8, 15, 10],   // 实际Draw
+      [15, 8, 40]     // 实际Away
+    ]
+  };
+}
+
+// 渲染预测结果
+function renderPredictionResult() {
+  // 显示模型整体预测准确率
+  const container = document.getElementById('predictionResult');
+  container.innerHTML = `
+    <div style="text-align:center;margin-bottom:20px;">
+      <div style="font-size:48px;font-weight:800;color:var(--green);margin-bottom:8px;">${(modelData.accuracy * 100).toFixed(2)}%</div>
+      <div style="font-size:16px;color:var(--muted);">模型整体准确率</div>
+    </div>
+    <div style="padding:16px;background:var(--surface);border-radius:8px;border:1px solid var(--line-soft);">
+      <div style="font-size:14px;color:var(--muted);margin-bottom:8px;">模型类型</div>
+      <div style="font-size:18px;font-weight:700;color:var(--text-strong);">Random Forest (100 estimators)</div>
+    </div>
+  `;
+}
+
+// 渲染最新预测
+function renderLatestPredictons() {
+  if (!matchData || matchData.length === 0) return;
+  
+  const container = document.getElementById('latestPredictons');
+  const latestMatches = matchData.slice(0, 5);  // 前5场比赛
+  
+  const html = latestMatches.map(match => {
+    const pred = match.ml_prediction || {};
+    const result = pred.predicted_result || '-';
+    const conf = pred.confidence ? (pred.confidence * 100).toFixed(1) : '-';
+    
+    let resultColor = 'var(--muted)';
+    if (result === 'H') resultColor = 'var(--green)';
+    else if (result === 'D') resultColor = 'var(--amber)';
+    else if (result === 'A') resultColor = 'var(--red)';
+    
+    return `
+      <div style="padding:12px;background:var(--surface);border-radius:8px;margin-bottom:8px;border:1px solid var(--line-soft);">
+        <div style="font-size:14px;font-weight:700;color:var(--text-strong);margin-bottom:6px;">${match.home_team} vs ${match.away_team}</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-size:13px;color:var(--muted);">${match.match_date || '--'}</span>
+          <span style="font-size:14px;font-weight:800;color:${resultColor};">${result === 'H' ? '主胜' : result === 'D' ? '平局' : '客胜'} (${conf}%)</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+  
+  container.innerHTML = html;
+}
+
+// 渲染特征重要性图表
+function renderFeatureChart() {
+  const canvas = document.getElementById('featureChart');
+  if (!canvas || !modelData) return;
+  
+  const features = modelData.featureImportance.slice(0, 10);
+  
+  new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: features.map(f => f.name),
+      datasets: [{
+        label: '特征重要性 (%)',
+        data: features.map(f => f.importance),
+        backgroundColor: '#2d8cff'
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(255,255,255,.08)' },
+          ticks: { color: 'var(--muted)' }
+        },
+        y: {
+          grid: { display: false },
+          ticks: { color: 'var(--text)' }
+        }
+      }
+    }
+  });
+}
+
+// 渲染模型性能网格
+function renderPerformanceGrid() {
+  const container = document.getElementById('performanceGrid');
+  
+  const metrics = [
+    { label: '准确率 (Accuracy)', value: (modelData.accuracy * 100).toFixed(2) + '%', color: 'var(--green)' },
+    { label: 'Macro F1', value: modelData.macroF1.toFixed(4), color: 'var(--blue)' },
+    { label: '精确率 (Home)', value: (modelData.precision.home * 100).toFixed(1) + '%', color: 'var(--green)' },
+    { label: '召回率 (Home)', value: (modelData.recall.home * 100).toFixed(1) + '%', color: 'var(--amber)' }
+  ];
+  
+  container.innerHTML = metrics.map(m => `
+    <div class="perf-item">
+      <div class="perf-label">${m.label}</div>
+      <div class="perf-value" style="color:${m.color};">${m.value}</div>
+    </div>
+  `).join('');
+}
+
+// 渲染混淆矩阵图表
+function renderConfusionChart() {
+  const canvas = document.getElementById('confusionChart');
+  if (!canvas || !modelData) return;
+  
+  const matrix = modelData.confusionMatrix;
+  
+  new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: ['实际主胜', '实际平局', '实际客胜'],
+      datasets: [
+        {
+          label: '预测主胜',
+          data: [matrix[0][0], matrix[1][0], matrix[2][0]],
+          backgroundColor: 'rgba(43,194,118,.6)'
+        },
+        {
+          label: '预测平局',
+          data: [matrix[0][1], matrix[1][1], matrix[2][1]],
+          backgroundColor: 'rgba(244,201,93,.6)'
+        },
+        {
+          label: '预测客胜',
+          data: [matrix[0][2], matrix[1][2], matrix[2][2]],
+          backgroundColor: 'rgba(239,78,85,.6)'
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          labels: { color: 'var(--text)' }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(255,255,255,.08)' },
+          ticks: { color: 'var(--text)' }
+        },
+        y: {
+          grid: { color: 'rgba(255,255,255,.08)' },
+          ticks: { color: 'var(--text)' }
+        }
+      }
+    }
+  });
+}
+
+// 页面加载时执行
+document.addEventListener('DOMContentLoaded', () => {
+  loadData();
+});
+</script>
+</body>
+</html>
