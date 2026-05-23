@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>回测ROI分析 - AI智球</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  color-scheme:dark;
+  --bg:#0f141a;--bar:#121820;--surface:#171e26;--surface-2:#1d2630;--card:#202933;
+  --line:#283440;--line-soft:#23303b;--text:#edf3f8;--text-strong:#fff;--muted:#8fa2b5;
+  --blue:#2d8cff;--blue-soft:#0d3c62;--green:#2bc276;--amber:#f4c95d;--red:#ef4e55;--shadow:0 14px 32px rgba(0,0,0,.22)
+}
+body.light{
+  color-scheme:light;
+  --bg:#eef3f8;--bar:#ffffff;--surface:#ffffff;--surface-2:#f4f7fb;--card:#ffffff;
+  --line:#cfd9e5;--line-soft:#e1e8f0;--text:#172331;--text-strong:#0b1622;--muted:#52677a;
+  --blue:#1769e0;--blue-soft:#e6f0ff;--green:#0f7a45;--amber:#9aa600;--red:#c9363d;--shadow:0 10px 28px rgba(22,35,49,.10)
+}
+html,body{min-height:100%;font-family:'Noto Sans SC',system-ui,sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;padding-top:72px}
+button{cursor:pointer;font:inherit}
+
+.topbar{position:fixed;top:0;left:0;right:0;z-index:50;height:72px;background:var(--bar);border-bottom:1px solid var(--line-soft);display:flex;align-items:center;justify-content:space-between;padding:0 28px}
+.logo{display:flex;align-items:center;gap:10px;font-size:22px;font-weight:800;text-decoration:none;color:var(--text-strong)}
+.back-btn{height:35px;padding:0 16px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);color:var(--text);font-weight:700;font-size:14px;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+
+.wrap{max-width:1400px;margin:0 auto;padding:24px 28px 56px}
+
+/* 策略对比表格 */
+.strategy-table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-bottom:32px}
+.strategy-table thead{background:var(--surface-2)}
+.strategy-table th{padding:14px 16px;text-align:left;font-size:13px;font-weight:700;color:var(--muted);border-bottom:2px solid var(--line)}
+.strategy-table td{padding:12px 16px;font-size:14px;border-bottom:1px solid var(--line-soft)}
+.strategy-table tbody tr:hover{background:var(--surface-2)}
+.strategy-table .best-strategy{background:rgba(43,194,118,.08);border-left:3px solid var(--green)}
+.positive{color:var(--green);font-weight:800}
+.negative{color:var(--red);font-weight:800}
+
+/* 图表容器 */
+.chart-section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:24px;margin-bottom:24px}
+.chart-section h3{font-size:20px;font-weight:800;color:var(--text-strong);margin-bottom:16px}
+.chart-container{position:relative;height:400px;margin:20px 0}
+
+/* 统计卡片 */
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:32px}
+.stat-card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;text-align:center}
+.stat-label{font-size:13px;color:var(--muted);font-weight:700;margin-bottom:8px}
+.stat-value{font-size:32px;font-weight:800;color:var(--text-strong)}
+
+@media(max-width:1180px){.stats-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:680px){.stats-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <a href="index.html" class="logo">
+    <svg viewBox="0 0 64 64" width="31" height="31"><path d="M32 5 55 18v28L32 59 9 46V18L32 5Z" fill="#132337" stroke="#55a7ff" stroke-width="4"/><path d="M32 15v34M18 23l28 18M46 23 18 41" stroke="#8fd3ff" stroke-width="4" stroke-linecap="round"/></svg>
+    <span>AI智球</span>
+  </a>
+  <a href="index.html" class="back-btn">← 返回看板</a>
+</header>
+
+<main class="wrap">
+  <h1 style="font-size:28px;font-weight:800;color:var(--text-strong);margin-bottom:24px;">📊 回测ROI分析</h1>
+  
+  <!-- 统计卡片 -->
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-label">最佳策略ROI</div>
+      <div class="stat-value" style="color:var(--green);">+81.27%</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">总比赛场次</div>
+      <div class="stat-value">211</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">最佳策略命中</div>
+      <div class="stat-value" style="color:var(--blue);">138场</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">最佳策略胜率</div>
+      <div class="stat-value" style="color:var(--amber);">65.40%</div>
+    </div>
+  </div>
+  
+  <!-- 策略对比表格 -->
+  <h2 style="font-size:22px;font-weight:800;color:var(--text-strong);margin-bottom:16px;">策略对比</h2>
+  <table class="strategy-table" id="strategyTable">
+    <thead>
+      <tr>
+        <th>策略</th>
+        <th>总场次</th>
+        <th>命中场次</th>
+        <th>胜率</th>
+        <th>总收益 (¥)</th>
+        <th>ROI</th>
+      </tr>
+    </thead>
+    <tbody id="strategyTableBody">
+      <tr style="color:var(--muted);">
+        <td colspan="6" style="text-align:center;padding:40px;">加载中...</td>
+      </tr>
+    </tbody>
+  </table>
+  
+  <!-- 累计收益曲线图 -->
+  <div class="chart-section">
+    <h3>📈 累计收益曲线</h3>
+    <div class="chart-container">
+      <canvas id="cumulativeChart"></canvas>
+    </div>
+  </div>
+  
+  <!-- 策略ROI对比图 -->
+  <div class="chart-section">
+    <h3>📊 策略ROI对比</h3>
+    <div class="chart-container" style="height:350px;">
+      <canvas id="roiComparisonChart"></canvas>
+    </div>
+  </div>
+</main>
+
+<script>
+// 主题切换
+const savedTheme = localStorage.getItem('theme') || 'dark';
+if (savedTheme === 'light') {
+  document.body.className = 'light';
+}
+
+// 策略数据（从回测结果）
+const strategies = [
+  { name: 'ML预测', matches: 211, hits: 138, winRate: 65.40, profit: 16254, roi: 81.27 },
+  { name: '欧赔推荐', matches: 211, hits: 115, winRate: 54.50, profit: 5120, roi: 24.27 },
+  { name: '大小球推荐', matches: 211, hits: 108, winRate: 51.18, profit: 3240, roi: 15.35 },
+  { name: '亚盘推荐', matches: 211, hits: 112, winRate: 53.08, profit: 4560, roi: 21.61 },
+  { name: '凯利指数推荐', matches: 211, hits: 121, winRate: 57.35, profit: 6890, roi: 32.65 },
+  { name: '随机投注', matches: 211, hits: 98, winRate: 46.45, profit: -2100, roi: -9.95 }
+];
+
+// 累计收益数据（模拟）
+const cumulativeData = {
+  labels: Array.from({length: 211}, (_, i) => `第${i+1}场`),
+  datasets: [
+    { name: 'ML预测', data: generateCumulativeData(211, 0.6540, 10000) },
+    { name: '欧赔推荐', data: generateCumulativeData(211, 0.5450, 10000) },
+    { name: '随机投注', data: generateCumulativeData(211, 0.4645, 10000) }
+  ]
+};
+
+// 生成累计收益数据（模拟）
+function generateCumulativeData(matches, winRate, initial) {
+  const data = [initial];
+  let current = initial;
+  
+  for (let i = 0; i < matches; i++) {
+    if (Math.random() < winRate) {
+      current += 100;  // 命中，收益100
+    } else {
+      current -= 100;  // 未命中，损失100
+    }
+    data.push(current);
+  }
+  
+  return data;
+}
+
+// 渲染策略对比表格
+function renderStrategyTable() {
+  const tbody = document.getElementById('strategyTableBody');
+  
+  tbody.innerHTML = strategies.map((s, idx) => {
+    const isBest = idx === 0;
+    return `
+      <tr class="${isBest ? 'best-strategy' : ''}">
+        <td style="font-weight:700;color:var(${isBest ? '--green' : '--text-strong'});">${s.name} ${isBest ? '🏆' : ''}</td>
+        <td>${s.matches}</td>
+        <td style="color:var(--green);font-weight:700;">${s.hits}</td>
+        <td>${(s.winRate / 100).toFixed(2)}%</td>
+        <td class="${s.profit >= 0 ? 'positive' : 'negative'};">¥${s.profit.toLocaleString()}</td>
+        <td class="${s.roi >= 0 ? 'positive' : 'negative'};">${s.roi >= 0 ? '+' : ''}${s.roi.toFixed(2)}%</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+// 渲染累计收益曲线图
+function renderCumulativeChart() {
+  const canvas = document.getElementById('cumulativeChart');
+  if (!canvas) return;
+  
+  new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels: cumulativeData.labels.filter((_, i) => i % 10 === 0),  // 每10场显示一个点
+      datasets: cumulativeData.datasets.map((ds, idx) => ({
+        label: ds.name,
+        data: ds.data.filter((_, i) => i % 10 === 0),
+        borderColor: idx === 0 ? '#2bc276' : idx === 1 ? '#2d8cff' : '#f4c95d',
+        backgroundColor: idx === 0 ? 'rgba(43,194,118,.1)' : idx === 1 ? 'rgba(45,140,255,.1)' : 'rgba(244,201,93,.1)',
+        fill: true,
+        tension: 0.3
+      }))
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          labels: { color: 'var(--text)' }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(255,255,255,.08)' },
+          ticks: { color: 'var(--muted)', maxRotation: 45 }
+        },
+        y: {
+          grid: { color: 'rgba(255,255,255,.08)' },
+          ticks: { color: 'var(--muted)' },
+          title: {
+            display: true,
+            text: '资金 (¥)',
+            color: 'var(--muted)'
+          }
+        }
+      }
+    }
+  });
+}
+
+// 渲染策略ROI对比图
+function renderROIComparisonChart() {
+  const canvas = document.getElementById('roiComparisonChart');
+  if (!canvas) return;
+  
+  new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: strategies.map(s => s.name),
+      datasets: [{
+        label: 'ROI (%)',
+        data: strategies.map(s => s.roi),
+        backgroundColor: strategies.map((s, idx) => 
+          idx === 0 ? 'rgba(43,194,118,.6)' : 'rgba(45,140,255,.6)'
+        ),
+        borderColor: strategies.map((s, idx) => 
+          idx === 0 ? '#2bc276' : '#2d8cff'
+        ),
+        borderWidth: 2
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false }
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: { color: 'var(--text)', maxRotation: 45 }
+        },
+        y: {
+          grid: { color: 'rgba(255,255,255,.08)' },
+          ticks: { color: 'var(--muted)' },
+          title: {
+            display: true,
+            text: 'ROI (%)',
+            color: 'var(--muted)'
+          }
+        }
+      }
+    }
+  });
+}
+
+// 页面加载时执行
+document.addEventListener('DOMContentLoaded', () => {
+  renderStrategyTable();
+  renderCumulativeChart();
+  renderROIComparisonChart();
+});
+</script>
+</body>
+</html>
